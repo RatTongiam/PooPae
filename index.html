@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SL-TTS Biomechanical Analyzer & Sway Plot</title>
+    <title>SL-TTS Biomechanical Analyzer & Multi-Color Sway Plot</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
@@ -12,7 +12,7 @@
 
     <div class="max-w-6xl mx-auto bg-white p-8 rounded-xl shadow-md">
         <h1 class="text-3xl font-bold text-gray-900 mb-2">🏃‍♂️ Single-Leg Time to Stability (SL-TTS) & Sway Analyzer</h1>
-        <p class="text-gray-600 mb-6">ระบบวิเคราะห์เสถียรภาพ พารามิเตอร์ชีวกลศาสตร์ และพื้นที่การเซ (Sway Ellipse Area) ทำงานแบบ Client-side 100%</p>
+        <p class="text-gray-600 mb-6">ระบบวิเคราะห์พารามิเตอร์ชีวกลศาสตร์ (แยกสีเส้นแสดงผลเฟสควบคุมสมดุลถาวรอย่างเที่ยงตรง)</p>
         
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 p-4 bg-gray-100 rounded-lg">
             <div>
@@ -68,7 +68,7 @@
                     <div class="text-xs text-gray-500 mt-2" id="metricContactTime">-</div>
                 </div>
                 <div class="bg-green-50 p-5 rounded-lg border border-green-200 shadow-sm">
-                    <span class="text-xs font-bold text-green-600 uppercase tracking-wide">Kinematics & Area Profile</span>
+                    <span class="text-xs font-bold text-green-600 uppercase tracking-wide">Kinematics & Area (Bounded Phase ONLY)</span>
                     <div class="text-sm font-semibold mt-1" id="metricSwayX">-</div>
                     <div class="text-sm font-semibold" id="metricSwayY">-</div>
                     <div class="text-sm font-bold mt-2 text-emerald-700" id="metricSwayArea">95% Ellipse Area: -</div>
@@ -91,7 +91,7 @@
                 </div>
             </div>
             <div class="bg-white p-4 border border-gray-200 rounded-xl shadow-sm h-[480px]">
-                <h3 class="text-sm font-bold text-gray-700 mb-2">🎯 Stabilogram (Sway Path & 95% Confidence Ellipse)</h3>
+                <h3 class="text-sm font-bold text-gray-700 mb-2">🎯 Stabilogram (Multi-Color Sway Path & 95% Ellipse)</h3>
                 <div class="h-[400px] w-full">
                     <canvas id="swayChart"></canvas>
                 </div>
@@ -115,16 +115,13 @@
             const helpText = document.getElementById('filterHelpText');
 
             if (type === 'butterworth') {
-                paramInput.value = 50;
-                paramUnit.innerText = "Hz";
+                paramInput.value = 50; paramUnit.innerText = "Hz";
                 helpText.innerText = "ตั้งค่าที่ 50 Hz เพื่อรักษาความถูกต้องของ True Peak Force";
             } else if (type === 'moving_average') {
-                paramInput.value = 10;
-                paramUnit.innerText = "จุด (Points)";
+                paramInput.value = 10; paramUnit.innerText = "จุด (Points)";
                 helpText.innerText = "จำนวนจุดข้อมูลดิบที่จะนำมาหาค่าเฉลี่ยสไลด์หน้าต่างร่วมกัน";
             } else {
-                paramUnit.innerText = "-";
-                helpText.innerText = "สัญญาณดิบดั้งเดิมไม่มีการคัดกรองสัญญาณรบกวน";
+                paramUnit.innerText = "-"; helpText.innerText = "สัญญาณดิบดั้งเดิมไม่มีการคัดกรองสัญญาณรบกวน";
             }
             if (rawFileText) processData(rawFileText, currentUploadedFileName);
         });
@@ -158,13 +155,13 @@
             return filtered;
         }
 
+        // Low-pass Butterworth Filter อันดับสอง
         function butterworthLowPass(data, cutoff, sampleRate) {
             const dt = 1.0 / sampleRate;
             if (cutoff >= sampleRate / 2) return [...data];
             const omega = 2.0 * Math.PI * cutoff / sampleRate;
             const k = Math.tan(omega / 2.0);
-            const k2 = k * k;
-            const sqrt2 = Math.sqrt(2.0);
+            const k2 = k * k; const sqrt2 = Math.sqrt(2.0);
             const norm = 1.0 / (1.0 + sqrt2 * k + k2);
             const a0 = k2 * norm; const a1 = 2.0 * a0; const a2 = a0;
             const b1 = 2.0 * (k2 - 1.0) * norm; const b2 = (1.0 - sqrt2 * k + k2) * norm;
@@ -184,61 +181,45 @@
             return [...backward].reverse();
         }
 
-        // ฟังก์ชันคำนวณหา 95% Confidence Ellipse Coordinates สำหรับวาดเส้นวงรีครอบคลุมพื้นที่การเซ
+        // คำนวณหาพื้นที่ 95% Confidence Ellipse
         function calculateEllipsePoints(xData, yData, numPoints = 100) {
             const n = xData.length;
-            if (n < 2) return { points: [], area: 0 };
+            if (n < 2) return { points: [], area: 0, centerX: 0, centerY: 0 };
 
             const meanX = xData.reduce((a, b) => a + b, 0) / n;
             const meanY = yData.reduce((a, b) => a + b, 0) / n;
 
             let varX = 0, varY = 0, covXY = 0;
             for(let i=0; i<n; i++) {
-                const diffX = xData[i] - meanX;
-                const diffY = yData[i] - meanY;
-                varX += diffX * diffX;
-                varY += diffY * diffY;
-                covXY += diffX * diffY;
+                const diffX = xData[i] - meanX; const diffY = yData[i] - meanY;
+                varX += diffX * diffX; varY += diffY * diffY; covXY += diffX * diffY;
             }
             varX /= (n - 1); varY /= (n - 1); covXY /= (n - 1);
 
-            // คำนวณหา Eigenvalues ของ Covariance Matrix เพื่อหาแกนสมมาตรหลักและแกนรอง
             const trace = varX + varY;
             const det = varX * varY - covXY * covXY;
             const sqrtTerm = Math.sqrt(trace * trace / 4.0 - det);
             const lambda1 = trace / 2.0 + sqrtTerm;
             const lambda2 = trace / 2.0 - sqrtTerm;
 
-            // ค่าวิกฤตสถิติสำหรับการกระจายแบบ Chi-Square ที่ระดับนัยสำคัญ 95% (2 Degrees of Freedom = 5.991)
             const chisquareVal = 5.991;
             const axisA = Math.sqrt(chisquareVal * lambda1);
             const axisB = Math.sqrt(chisquareVal * lambda2);
-            
-            // พื้นที่รูปวงรี (Area of Sway Ellipse)
             const ellipseArea = Math.PI * axisA * axisB;
 
-            // หามุมเอียงระนาบ (Rotation Angle) ของทิศทางการเซหลัก
             let angle = 0;
-            if (covXY !== 0) {
-                angle = Math.atan2(lambda1 - varX, covXY);
-            } else if (varX < varY) {
-                angle = Math.PI / 2;
-            }
+            if (covXY !== 0) { angle = Math.atan2(lambda1 - varX, covXY); }
+            else if (varX < varY) { angle = Math.PI / 2; }
 
             let ellipsePoints = [];
             for (let i = 0; i < numPoints; i++) {
                 const theta = (i / numPoints) * 2 * Math.PI;
-                const x0 = axisA * Math.cos(theta);
-                const y0 = axisB * Math.sin(theta);
-                
-                // สมการเมทริกซ์การหมุนพิกัด (Rotation Matrix Transformation)
+                const x0 = axisA * Math.cos(theta); const y0 = axisB * Math.sin(theta);
                 const rotX = meanX + x0 * Math.cos(angle) - y0 * Math.sin(angle);
                 const rotY = meanY + x0 * Math.sin(angle) + y0 * Math.cos(angle);
                 ellipsePoints.push({ x: rotX, y: rotY });
             }
-            // ปิดลูปวงรีกลับมาที่จุดแรก
             ellipsePoints.push(ellipsePoints[0]);
-
             return { points: ellipsePoints, area: ellipseArea, centerX: meanX, centerY: meanY };
         }
 
@@ -265,7 +246,7 @@
                 return;
             }
 
-            let timestamps = [], rawForceData = [], swayXData = [], swayYData = [], velocityData = [];
+            let timestamps = [], rawForceData = [], rawSwayXData = [], rawSwayYData = [], velocityData = [];
 
             for (let i = 1; i < lines.length; i++) {
                 if (!lines[i].trim()) continue;
@@ -274,8 +255,8 @@
 
                 timestamps.push(parseFloat(cols[idxTime]));
                 rawForceData.push(parseFloat(cols[idxForce]));
-                swayXData.push(parseFloat(cols[idxSwayX]));
-                swayYData.push(parseFloat(cols[idxSwayY]));
+                rawSwayXData.push(parseFloat(cols[idxSwayX]));
+                rawSwayYData.push(parseFloat(cols[idxSwayY]));
                 velocityData.push(parseFloat(cols[idxVelocity]));
             }
 
@@ -290,42 +271,90 @@
 
             const timeSecs = timestamps.map(t => t / samplingRate);
             const peakForce = Math.max(...forceData);
-            
-            // หาดัชนีและพิกัดตำแหน่งของ Peak Velocity ในเส้นทางเคลื่อนที่
-            let absVelocity = velocityData.map(Math.abs);
-            const maxVelocity = Math.max(...absVelocity);
-            const idxPeakVelocity = absVelocity.indexOf(maxVelocity);
-            const peakVelocitySwayX = swayXData[idxPeakVelocity];
-            const peakVelocitySwayY = swayYData[idxPeakVelocity];
-            const peakVelocityTimeSec = timeSecs[idxPeakVelocity];
-            
-            const minSwayX = Math.min(...swayXData); const maxSwayX = Math.max(...swayXData);
-            const minSwayY = Math.min(...swayYData); const maxSwayY = Math.max(...swayYData);
+            const peakForceIdx = forceData.indexOf(peakForce);
 
-            // คำนวณขอบเขตและพื้นที่การเซ (95% Ellipse Area)
-            const ellipseResult = calculateEllipsePoints(swayXData, swayYData);
-
-            let idxContact = forceData.findIndex(f => f >= contactThreshold);
-            let tContactSec = null; let tStabilitySec = null; let slTtsSec = null;
-            let bw = 0; let upperCombined = 0; let lowerCombined = 0;
-
-            if (idxContact !== -1) {
-                tContactSec = timeSecs[idxContact];
-                const last100 = forceData.slice(-100);
-                bw = last100.reduce((a, b) => a + b, 0) / last100.length;
-                upperCombined = bw + (0.05 * bw);
-                lowerCombined = bw - (0.05 * bw);
-
-                for (let i = idxContact; i <= forceData.length - windowSize; i++) {
-                    const window = forceData.slice(i, i + windowSize);
-                    const isStable = window.every(f => f >= lowerCombined && f <= upperCombined);
-                    if (isStable) {
-                        tStabilitySec = timeSecs[i];
-                        slTtsSec = tStabilitySec - tContactSec;
-                        break;
-                    }
+            // Retroactive Threshold Detection ตรวจจับจุดปะทะแลนดิ้งสัมบูรณ์จากสัญญาณดิบ
+            let idxContact = -1;
+            for (let i = peakForceIdx; i >= 0; i--) {
+                if (rawForceData[i] < contactThreshold) {
+                    idxContact = i + 1;
+                    break;
                 }
             }
+            if (idxContact === -1) idxContact = 0;
+
+            let tContactSec = timeSecs[idxContact];
+            let tStabilitySec = null; 
+            let idxStability = null;
+            let slTtsSec = null;
+            let bw = 0; let upperCombined = 0; let lowerCombined = 0;
+
+            const last100 = forceData.slice(-100);
+            bw = last100.reduce((a, b) => a + b, 0) / last100.length;
+            upperCombined = bw + (0.05 * bw);
+            lowerCombined = bw - (0.05 * bw);
+
+            // ค้นหาตำแหน่งดัชนีเข้าสู่สภาวะเสถียร (Stability Onset Index)
+            for (let i = idxContact; i <= forceData.length - windowSize; i++) {
+                const window = forceData.slice(i, i + windowSize);
+                const isStable = window.every(f => f >= lowerCombined && f <= upperCombined);
+                if (isStable) {
+                    idxStability = i;
+                    tStabilitySec = timeSecs[i];
+                    slTtsSec = tStabilitySec - tContactSec;
+                    break;
+                }
+            }
+
+            // --- ตรรกะสำคัญ: ตัดข้อมูลแบ่งย่อยเป็นเฟสและแยกสองสีอย่างเด็ดขาด ---
+            let endSliceIdx = forceData.length;
+            if (idxStability !== null) {
+                endSliceIdx = idxStability + windowSize;
+            }
+
+            // 1. สกัดอาเรย์รวมช่วงจำกัดเฟส (Bounded Phase)
+            const boundedSwayX = rawSwayXData.slice(idxContact, endSliceIdx);
+            const boundedSwayY = rawSwayYData.slice(idxContact, endSliceIdx);
+            const boundedVelocity = velocityData.slice(idxContact, endSliceIdx);
+
+            // 2. แยกเฟสย่อยสำหรับเรนเดอร์กราฟิกตามสีเส้นที่แตกต่างกัน
+            let preStablePoints = [];  // เฟส 1: สัมผัสพื้นจนถึงก่อนนิ่ง (สีเทา)
+            let stablePoints = [];     // เฟส 2: จุดนิ่งถาวร Onset + 1000ms (สีน้ำเงินเข้ม)
+
+            if (idxStability !== null) {
+                // พล็อตช่วงแรก (สีเทา)
+                for (let i = idxContact; i <= idxStability; i++) {
+                    preStablePoints.push({ x: rawSwayXData[i], y: rawSwayYData[i] });
+                }
+                // พล็อตช่วงเสถียรหลัก (สีน้ำเงินเข้ม)
+                for (let i = idxStability; i < endSliceIdx; i++) {
+                    stablePoints.push({ x: rawSwayXData[i], y: rawSwayYData[i] });
+                }
+            } else {
+                // Fallback กรณีไม่เข้าเกณฑ์ให้นับเป็นกลุ่มสีเทาทั้งหมดเพื่อเลี่ยงบั๊กกราฟเปล่า
+                for (let i = idxContact; i < endSliceIdx; i++) {
+                    preStablePoints.push({ x: rawSwayXData[i], y: rawSwayYData[i] });
+                }
+            }
+
+            const minSwayX = Math.min(...boundedSwayX); const maxSwayX = Math.max(...boundedSwayX);
+            const minSwayY = Math.min(...boundedSwayY); const maxSwayY = Math.max(...boundedSwayY);
+
+            // คำนวณความเร็วสูงสุดภายในกรอบเวลาหลัก
+            let absVelocity = boundedVelocity.map(Math.abs);
+            const maxVelocity = Math.max(...absVelocity);
+            const idxPeakVelocityBounded = absVelocity.indexOf(maxVelocity);
+            
+            const absoluteIdxPeakVelocity = idxContact + idxPeakVelocityBounded;
+            const peakVelocitySwayX = rawSwayXData[absoluteIdxPeakVelocity];
+            const peakVelocitySwayY = rawSwayYData[absoluteIdxPeakVelocity];
+            const peakVelocityTimeSec = timeSecs[absoluteIdxPeakVelocity];
+
+            const firstTouchX = boundedSwayX[0];
+            const firstTouchY = boundedSwayY[0];
+
+            // ประมวลผลพื้นที่วงรี 95%
+            const ellipseResult = calculateEllipsePoints(boundedSwayX, boundedSwayY);
 
             document.getElementById('metricPeakForce').innerText = peakForce.toFixed(2) + " N";
             document.getElementById('metricBW').innerText = bw > 0 ? "Body Weight อ้างอิง: " + bw.toFixed(2) + " N" : "Body Weight อ้างอิง: -";
@@ -335,7 +364,7 @@
                 document.getElementById('metricContactTime').innerText = "Initial Contact: " + tContactSec.toFixed(3) + " s | Stability Onset: " + tStabilitySec.toFixed(3) + " s";
             } else {
                 document.getElementById('metricTTS').innerText = "ไม่เข้าเกณฑ์คงที่";
-                document.getElementById('metricContactTime').innerText = idxContact !== -1 ? "Initial Contact: " + tContactSec.toFixed(3) + " s" : "ไม่พบจุดปะทะแรง 10N";
+                document.getElementById('metricContactTime').innerText = "Initial Contact: " + tContactSec.toFixed(3) + " s";
             }
 
             const rangeX = maxSwayX - minSwayX;
@@ -362,7 +391,9 @@
                 rangeSwayY: rangeY,
                 swayArea95: ellipseResult.area,
                 peakVelocity: maxVelocity,
-                peakVelocityTime: peakVelocityTimeSec
+                peakVelocityTime: peakVelocityTimeSec,
+                firstTouchX: firstTouchX,
+                firstTouchY: firstTouchY
             };
 
             // ---- CHART 1: FORCE-TIME CURVE ----
@@ -397,39 +428,53 @@
                 }
             });
 
-            // ---- CHART 2: SWAY PLOT (STABILOGRAM) ----
+            // ---- CHART 2: SWAY PLOT (MULTIPLE DATASETS / STABILOGRAM) ----
             if (window.mySwayChart) window.mySwayChart.destroy();
-            const ctxSway = document.getElementById('forceChart').parentNode.cloneNode(true);
             const canvasSway = document.getElementById('swayChart');
-            
-            // จับพิกัดจุดเชื่อมโยงเส้นทางเพื่อเรนเดอร์ในรูปแบบกราฟกระจาย (Scatter X-Y Plot)
-            const swayPathPoints = swayXData.map((x, idx) => ({ x: x, y: swayYData[idx] }));
 
             window.mySwayChart = new Chart(canvasSway, {
                 type: 'scatter',
                 data: {
                     datasets: [
                         {
-                            label: 'Sway Path (COP เส้นทาง)',
-                            data: swayPathPoints,
-                            borderColor: 'rgba(127, 127, 127, 0.4)',
+                            label: 'เฟส 1: จังหวะเข้าสู่เสถียรภาพ (IC to Onset)',
+                            data: preStablePoints,
+                            borderColor: 'rgba(150, 150, 150, 0.45)', // สีเทาโปร่งแสง
                             borderWidth: 1.5,
                             showLine: true,
                             pointRadius: 0,
                             fill: false
                         },
                         {
-                            label: '95% Confidence Ellipse Area',
-                            data: ellipseResult.points,
-                            borderColor: '#e377c2',
-                            borderWidth: 2,
+                            label: 'เฟส 2: ช่วงเสถียรคงที่ (Onset + 1000ms)',
+                            data: stablePoints,
+                            borderColor: '#1f77b4', // สีน้ำเงินเข้ม
+                            borderWidth: 3,        // เส้นหนาขึ้นเพื่อความเด่นชัด
                             showLine: true,
                             pointRadius: 0,
-                            backgroundColor: 'rgba(227, 119, 194, 0.05)',
+                            fill: false
+                        },
+                        {
+                            label: '95% Confidence Ellipse',
+                            data: ellipseResult.points,
+                            borderColor: '#e377c2',
+                            borderWidth: 1.5,
+                            showLine: true,
+                            pointRadius: 0,
+                            backgroundColor: 'rgba(227, 119, 194, 0.03)',
                             fill: true
                         },
                         {
-                            label: `Peak Velocity Location (${maxVelocity.toFixed(4)} m/s)`,
+                            label: '🟠 First Touch',
+                            data: [{ x: firstTouchX, y: firstTouchY }],
+                            backgroundColor: '#ff7f0e',
+                            borderColor: '#ffffff',
+                            borderWidth: 2,
+                            pointRadius: 8,
+                            pointHoverRadius: 10
+                        },
+                        {
+                            label: `🔺 Peak Velocity (${maxVelocity.toFixed(4)} m/s)`,
                             data: [{ x: peakVelocitySwayX, y: peakVelocitySwayY }],
                             backgroundColor: '#d62728',
                             pointStyle: 'triangle',
@@ -463,9 +508,11 @@
                 ['Initial Contact Time', d.initialContact ? d.initialContact.toFixed(4) : 'N/A', 'Second (s)'],
                 ['Stability Onset Time', d.stabilityOnset ? d.stabilityOnset.toFixed(4) : 'N/A', 'Second (s)'],
                 ['Single-Leg Time to Stability (SL-TTS)', d.slTts ? d.slTts.toFixed(4) : 'N/A', 'Second (s)'],
-                ['Max Range Sway X', d.rangeSwayX.toFixed(4), 'Units'],
-                ['Max Range Sway Y', d.rangeSwayY.toFixed(4), 'Units'],
-                ['95% Confidence Ellipse Area', d.swayArea95.toFixed(4), 'Units²'],
+                ['Max Range Sway X (Bounded Phase)', d.rangeSwayX.toFixed(4), 'Units'],
+                ['Max Range Sway Y (Bounded Phase)', d.rangeSwayY.toFixed(4), 'Units'],
+                ['95% Confidence Ellipse Area (Bounded Sway)', d.swayArea95.toFixed(4), 'Units²'],
+                ['First Touch COP X', d.firstTouchX.toFixed(4), 'Units'],
+                ['First Touch COP Y', d.firstTouchY.toFixed(4), 'Units'],
                 ['Peak Velocity', d.peakVelocity.toFixed(6), 'm/s'],
                 ['Time at Peak Velocity', d.peakVelocityTime.toFixed(4), 'Second (s)']
             ];
@@ -474,7 +521,7 @@
             const url = URL.createObjectURL(blob);
             const link = document.createElement("a");
             const baseName = d.fileName.substring(0, d.fileName.lastIndexOf('.')) || d.fileName;
-            link.setAttribute("href", url); link.setAttribute("download", `SL_TTS_Sway_Report_${baseName}.csv`);
+            link.setAttribute("href", url); link.setAttribute("download", `SL_TTS_MultiColor_Report_${baseName}.csv`);
             link.style.visibility = 'hidden'; document.body.appendChild(link); link.click(); document.body.removeChild(link);
         });
     </script>

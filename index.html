@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SL-TTS Biomechanical Analyzer</title>
+    <title>SL-TTS Biomechanical Analyzer with Filter</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
@@ -12,9 +12,9 @@
 
     <div class="max-w-6xl mx-auto bg-white p-8 rounded-xl shadow-md">
         <h1 class="text-3xl font-bold text-gray-900 mb-2">🏃‍♂️ Single-Leg Time to Stability (SL-TTS) Analyzer</h1>
-        <p class="text-gray-600 mb-6">ระบบวิเคราะห์เสถียรภาพและพารามิเตอร์ชีวกลศาสตร์ในท่า Single Leg Deadlift (SLDL) ทำงานแบบ Client-side 100%</p>
+        <p class="text-gray-600 mb-6">ระบบวิเคราะห์เสถียรภาพและพารามิเตอร์ชีวกลศาสตร์ในท่า Single Leg Deadlift (SLDL) พร้อมระบบกรองสัญญาณ</p>
         
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 p-4 bg-gray-100 rounded-lg">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 p-4 bg-gray-100 rounded-lg">
             <div>
                 <label class="block text-sm font-semibold text-gray-700 mb-1">Sampling Rate (Hz)</label>
                 <input type="number" id="samplingRate" value="1000" class="w-full p-2 border border-gray-300 rounded bg-white">
@@ -26,6 +26,25 @@
             <div>
                 <label class="block text-sm font-semibold text-gray-700 mb-1">Stability Window (วินาที)</label>
                 <input type="number" id="stabilityWindow" value="1" step="0.1" class="w-full p-2 border border-gray-300 rounded bg-white">
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 p-4 bg-emerald-50 rounded-lg border border-emerald-200">
+            <div>
+                <label class="block text-sm font-bold text-emerald-800 mb-1">📊 เลือกรูปแบบการกรองสัญญาณ (Filter Type)</label>
+                <select id="filterType" class="w-full p-2 border border-emerald-300 rounded bg-white font-semibold">
+                    <option value="none">Raw Data (ไม่กรองสัญญาณ)</option>
+                    <option value="moving_average">Moving Average Filter</option>
+                    <option value="butterworth">Low-pass Butterworth Filter (2nd-Order Dual-Pass)</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-bold text-emerald-800 mb-1">🎚️ Cut-off Frequency / Window Size</label>
+                <div class="flex gap-2">
+                    <input type="number" id="filterParam" value="10" min="1" class="w-full p-2 border border-emerald-300 rounded bg-white">
+                    <span id="filterParamUnit" class="self-center text-sm font-semibold text-emerald-700 w-16">Hz</span>
+                </div>
+                <small class="text-xs text-gray-500" id="filterHelpText">สำหรับ Butterworth แนะนำค่ามาตรฐานที่ 5 - 15 Hz</small>
             </div>
         </div>
 
@@ -69,30 +88,124 @@
     </div>
 
     <script>
-        // ประกาศตัวแปรไว้ที่ Global Scope เพื่อป้องกัน ReferenceError
         window.myChart = null;
         let globalReportData = null;
+        let rawFileText = null;
+        let currentUploadedFileName = "";
 
         Chart.register(window['chartjs-plugin-annotation']);
+
+        // ดักจับการเปลี่ยนค่าฟิลเตอร์เพื่อปรับปรุงหน่วยการแสดงผลการตั้งค่า
+        document.getElementById('filterType').addEventListener('change', function() {
+            const type = this.value;
+            const paramInput = document.getElementById('filterParam');
+            const paramUnit = document.getElementById('filterParamUnit');
+            const helpText = document.getElementById('filterHelpText');
+
+            if (type === 'butterworth') {
+                paramInput.value = 10;
+                paramUnit.innerText = "Hz";
+                helpText.innerText = "สำหรับ Low-pass Butterworth แนะนำค่ามาตรฐานที่ 5 - 15 Hz";
+            } else if (type === 'moving_average') {
+                paramInput.value = 10;
+                paramUnit.innerText = "จุด (Points)";
+                helpText.innerText = "จำนวนจุดข้อมูลดิบที่จะนำมาหาค่าเฉลี่ยสไลด์หน้าต่างร่วมกัน";
+            } else {
+                paramUnit.innerText = "-";
+                helpText.innerText = "สัญญาณดิบดั้งเดิมไม่มีการคัดกรองสัญญาณรบกวน";
+            }
+            
+            // หากมีไฟล์เปิดค้างไว้ ให้สั่งคำนวณและพลอตกราฟใหม่ทันทีเมื่อเปลี่ยนฟิลเตอร์
+            if (rawFileText) {
+                processData(rawFileText, currentUploadedFileName);
+            }
+        });
+
+        // ดักจับการเปลี่ยนตัวแปรความถี่ฟิลเตอร์เพื่อคำนวณกราฟใหม่แบบเรียลไทม์
+        document.getElementById('filterParam').addEventListener('input', function() {
+            if (rawFileText) {
+                processData(rawFileText, currentUploadedFileName);
+            }
+        });
 
         document.getElementById('csvFileInput').addEventListener('change', function(e) {
             const file = e.target.files[0];
             if (!file) return;
 
+            currentUploadedFileName = file.name;
             const reader = new FileReader();
             reader.onload = function(event) {
-                processData(event.target.result, file.name);
+                rawFileText = event.target.result;
+                processData(rawFileText, currentUploadedFileName);
             };
             reader.readAsText(file);
         });
+
+        // --- 1. ฟังก์ชันทางคณิตศาสตร์: Moving Average Filter ---
+        function applyMovingAverage(data, windowSize) {
+            if (windowSize <= 1) return data;
+            let filtered = [];
+            for (let i = 0; i < data.length; i++) {
+                let start = Math.max(0, i - Math.floor(windowSize / 2));
+                let end = Math.min(data.length, i + Math.floor(windowSize / 2) + 1);
+                let sum = 0;
+                for (let j = start; j < end; j++) {
+                    sum += data[j];
+                }
+                filtered.push(sum / (end - start));
+            }
+            return filtered;
+        }
+
+        // --- 2. ฟังก์ชันทางคณิตศาสตร์: 2nd-Order Low-pass Butterworth Filter (Single Pass) ---
+        function butterworthLowPass(data, cutoff, sampleRate) {
+            const dt = 1.0 / sampleRate;
+            const rc = 1.0 / (2.0 * Math.PI * cutoff);
+            const alpha = dt / (rc + dt);
+            
+            let filtered = new Array(data.length);
+            filtered[0] = data[0];
+            if(data.length > 1) filtered[1] = data[1];
+            
+            // ค่าสัมประสิทธิ์สำหรับตัวกรองสัญญาณ Butterworth อันดับสอง 
+            const omega = 2.0 * Math.PI * cutoff / sampleRate;
+            const k = Math.tan(omega / 2.0);
+            const k2 = k * k;
+            const sqrt2 = Math.sqrt(2.0);
+            
+            const norm = 1.0 / (1.0 + sqrt2 * k + k2);
+            const a0 = k2 * norm;
+            const a1 = 2.0 * a0;
+            const a2 = a0;
+            const b1 = 2.0 * (k2 - 1.0) * norm;
+            const b2 = (1.0 - sqrt2 * k + k2) * norm;
+
+            for (let i = 2; i < data.length; i++) {
+                filtered[i] = a0 * data[i] + a1 * data[i-1] + a2 * data[i-2] - b1 * filtered[i-1] - b2 * filtered[i-2];
+            }
+            return filtered;
+        }
+
+        // --- 3. ฟังก์ชันการกรองแบบเดินหน้าและถอยหลังเพื่อหักล้างเฟสเคลื่อน (Dual-Pass Zero-Phase Lag) ---
+        function applyZeroPhaseButterworth(data, cutoff, sampleRate) {
+            if (cutoff >= sampleRate / 2) return data; // ป้องกัน Nyquist Shannon Frequency Bound Error
+            // กรองไปข้างหน้า
+            let forward = butterworthLowPass(data, cutoff, sampleRate);
+            // พลิกกลับสายข้อมูลแล้วกรองถอยหลัง
+            forward.reverse();
+            let backward = butterworthLowPass(forward, cutoff, sampleRate);
+            backward.reverse(); // ดึงลำดับกลับคืนที่เดิม
+            return backward;
+        }
 
         function processData(text, currentFileName) {
             const samplingRate = parseFloat(document.getElementById('samplingRate').value);
             const contactThreshold = parseFloat(document.getElementById('contactThreshold').value);
             const stabilityWindowSec = parseFloat(document.getElementById('stabilityWindow').value);
             const windowSize = Math.floor(stabilityWindowSec * samplingRate);
+            const selectedFilter = document.getElementById('filterType').value;
+            const filterParamVal = parseFloat(document.getElementById('filterParam').value);
 
-            // รองรับการตัดบรรทัดของทุกระบบปฏิบัติการ
             const lines = text.split(/\r?\n/);
             if (lines.length < 2) return;
 
@@ -109,7 +222,7 @@
             }
 
             let timestamps = [];
-            let forceData = [];
+            let rawForceData = [];
             let swayXData = [];
             let swayYData = [];
             let velocityData = [];
@@ -120,10 +233,20 @@
                 if (cols.length < headers.length) continue;
 
                 timestamps.push(parseFloat(cols[idxTime]));
-                forceData.push(parseFloat(cols[idxForce]));
+                rawForceData.push(parseFloat(cols[idxForce]));
                 swayXData.push(parseFloat(cols[idxSwayX]));
                 swayYData.push(parseFloat(cols[idxSwayY]));
                 velocityData.push(parseFloat(cols[idxVelocity]));
+            }
+
+            // ---- ขั้นตอนทำระบบกรองสัญญาณตามเงื่อนไขที่เลือก ----
+            let forceData = [];
+            if (selectedFilter === 'moving_average' && filterParamVal > 0) {
+                forceData = applyMovingAverage(rawForceData, Math.floor(filterParamVal));
+            } else if (selectedFilter === 'butterworth' && filterParamVal > 0) {
+                forceData = applyZeroPhaseButterworth(rawForceData, filterParamVal, samplingRate);
+            } else {
+                forceData = [...rawForceData]; // ไม่กรอง ใช้สัญญาณดิบสัมบูรณ์
             }
 
             const timeSecs = timestamps.map(t => t / samplingRate);
@@ -184,6 +307,8 @@
 
             globalReportData = {
                 fileName: currentFileName,
+                filterApplied: selectedFilter,
+                filterValue: filterParamVal,
                 peakForce: peakForce,
                 bodyWeight: bw,
                 initialContact: tContactSec,
@@ -194,7 +319,6 @@
                 peakVelocity: maxVelocity
             };
 
-            // เรียกทำลายออบเจกต์กราฟเก่าผ่าน window.myChart เพื่อความเสถียร
             if (window.myChart) {
                 window.myChart.destroy();
             }
@@ -225,9 +349,9 @@
                 data: {
                     labels: timeSecs,
                     datasets: [{
-                        label: 'Vertical Ground Reaction Force (N)',
+                        label: 'Vertical Ground Reaction Force (N) [' + selectedFilter + ']',
                         data: forceData,
-                        borderColor: '#7f7f7f',
+                        borderColor: '#1f77b4',
                         borderWidth: 1.5,
                         pointRadius: 0,
                         fill: false
@@ -236,6 +360,7 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    animation: false, // ปิด Animation เพื่อความเร็วสูงสุดในการคำนวณแบบเรียลไทม์
                     scales: {
                         x: { type: 'linear', title: { display: true, text: 'Time (Seconds)' } },
                         y: { title: { display: true, text: 'Force (Newtons)' } }
@@ -256,6 +381,8 @@
             const csvRows = [
                 ['Parameter', 'Value', 'Unit'],
                 ['File Name', d.fileName, 'Text'],
+                ['Filter Model Applied', d.filterApplied, 'Text'],
+                ['Filter Parameters Settings', d.filterValue, 'Hz or Points'],
                 ['Calculated Body Weight (BW)', d.bodyWeight ? d.bodyWeight.toFixed(4) : 'N/A', 'Newton (N)'],
                 ['Peak Force', d.peakForce.toFixed(4), 'Newton (N)'],
                 ['Initial Contact Time', d.initialContact ? d.initialContact.toFixed(4) : 'N/A', 'Second (s)'],
@@ -273,7 +400,7 @@
             
             const baseName = d.fileName.substring(0, d.fileName.lastIndexOf('.')) || d.fileName;
             link.setAttribute("href", url);
-            link.setAttribute("download", `SL_TTS_Report_${baseName}.csv`);
+            link.setAttribute("download", `SL_TTS_Filtered_Report_${baseName}.csv`);
             link.style.visibility = 'hidden';
             
             document.body.appendChild(link);

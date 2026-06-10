@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SL-TTS Biomechanical Analyzer (Fixed Filter)</title>
+    <title>SL-TTS Biomechanical Analyzer & Sway Plot</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
@@ -11,8 +11,8 @@
 <body class="bg-gray-50 text-gray-800 font-sans p-6">
 
     <div class="max-w-6xl mx-auto bg-white p-8 rounded-xl shadow-md">
-        <h1 class="text-3xl font-bold text-gray-900 mb-2">🏃‍♂️ Single-Leg Time to Stability (SL-TTS) Analyzer</h1>
-        <p class="text-gray-600 mb-6">ระบบวิเคราะห์เสถียรภาพและพารามิเตอร์ชีวกลศาสตร์ในท่า Single Leg Deadlift (SLDL) พร้อมระบบกรองสัญญาณ</p>
+        <h1 class="text-3xl font-bold text-gray-900 mb-2">🏃‍♂️ Single-Leg Time to Stability (SL-TTS) & Sway Analyzer</h1>
+        <p class="text-gray-600 mb-6">ระบบวิเคราะห์เสถียรภาพ พารามิเตอร์ชีวกลศาสตร์ และพื้นที่การเซ (Sway Ellipse Area) ทำงานแบบ Client-side 100%</p>
         
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 p-4 bg-gray-100 rounded-lg">
             <div>
@@ -35,16 +35,16 @@
                 <select id="filterType" class="w-full p-2 border border-emerald-300 rounded bg-white font-semibold">
                     <option value="none">Raw Data (ไม่กรองสัญญาณ)</option>
                     <option value="moving_average">Moving Average Filter</option>
-                    <option value="butterworth">Low-pass Butterworth Filter (2nd-Order Dual-Pass)</option>
+                    <option value="butterworth" selected>Low-pass Butterworth Filter (2nd-Order Dual-Pass)</option>
                 </select>
             </div>
             <div>
                 <label class="block text-sm font-bold text-emerald-800 mb-1">🎚️ Cut-off Frequency / Window Size</label>
                 <div class="flex gap-2">
-                    <input type="number" id="filterParam" value="10" min="1" class="w-full p-2 border border-emerald-300 rounded bg-white">
+                    <input type="number" id="filterParam" value="50" min="1" class="w-full p-2 border border-emerald-300 rounded bg-white">
                     <span id="filterParamUnit" class="self-center text-sm font-semibold text-emerald-700 w-16">Hz</span>
                 </div>
-                <small class="text-xs text-gray-500" id="filterHelpText">สำหรับ Butterworth แนะนำให้ตั้งค่าในช่วง 40 - 50 Hz</small>
+                <small class="text-xs text-gray-500" id="filterHelpText">ตั้งค่าที่ 50 Hz เพื่อรักษาความถูกต้องของ True Peak Force</small>
             </div>
         </div>
 
@@ -68,10 +68,11 @@
                     <div class="text-xs text-gray-500 mt-2" id="metricContactTime">-</div>
                 </div>
                 <div class="bg-green-50 p-5 rounded-lg border border-green-200 shadow-sm">
-                    <span class="text-xs font-bold text-green-600 uppercase tracking-wide">Kinematics Profile</span>
+                    <span class="text-xs font-bold text-green-600 uppercase tracking-wide">Kinematics & Area Profile</span>
                     <div class="text-sm font-semibold mt-1" id="metricSwayX">-</div>
                     <div class="text-sm font-semibold" id="metricSwayY">-</div>
-                    <div class="text-sm font-semibold mt-2 text-gray-700" id="metricVelocity">-</div>
+                    <div class="text-sm font-bold mt-2 text-emerald-700" id="metricSwayArea">95% Ellipse Area: -</div>
+                    <div class="text-sm font-semibold mt-1 text-gray-700" id="metricVelocity">-</div>
                 </div>
             </div>
 
@@ -82,13 +83,25 @@
             </div>
         </div>
 
-        <div class="relative h-[450px] w-full hidden" id="chartContainer">
-            <canvas id="forceChart"></canvas>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 hidden" id="chartContainer">
+            <div class="bg-white p-4 border border-gray-200 rounded-xl shadow-sm h-[480px]">
+                <h3 class="text-sm font-bold text-gray-700 mb-2">📈 Force-Time Curve Analysis</h3>
+                <div class="h-[400px] w-full">
+                    <canvas id="forceChart"></canvas>
+                </div>
+            </div>
+            <div class="bg-white p-4 border border-gray-200 rounded-xl shadow-sm h-[480px]">
+                <h3 class="text-sm font-bold text-gray-700 mb-2">🎯 Stabilogram (Sway Path & 95% Confidence Ellipse)</h3>
+                <div class="h-[400px] w-full">
+                    <canvas id="swayChart"></canvas>
+                </div>
+            </div>
         </div>
     </div>
 
     <script>
-        window.myChart = null;
+        window.myForceChart = null;
+        window.mySwayChart = null;
         let globalReportData = null;
         let rawFileText = null;
         let currentUploadedFileName = "";
@@ -102,9 +115,9 @@
             const helpText = document.getElementById('filterHelpText');
 
             if (type === 'butterworth') {
-                paramInput.value = 10;
+                paramInput.value = 50;
                 paramUnit.innerText = "Hz";
-                helpText.innerText = "สำหรับ Low-pass Butterworth แนะนำค่ามาตรฐานที่ 5 - 15 Hz";
+                helpText.innerText = "ตั้งค่าที่ 50 Hz เพื่อรักษาความถูกต้องของ True Peak Force";
             } else if (type === 'moving_average') {
                 paramInput.value = 10;
                 paramUnit.innerText = "จุด (Points)";
@@ -113,22 +126,16 @@
                 paramUnit.innerText = "-";
                 helpText.innerText = "สัญญาณดิบดั้งเดิมไม่มีการคัดกรองสัญญาณรบกวน";
             }
-            
-            if (rawFileText) {
-                processData(rawFileText, currentUploadedFileName);
-            }
+            if (rawFileText) processData(rawFileText, currentUploadedFileName);
         });
 
         document.getElementById('filterParam').addEventListener('input', function() {
-            if (rawFileText) {
-                processData(rawFileText, currentUploadedFileName);
-            }
+            if (rawFileText) processData(rawFileText, currentUploadedFileName);
         });
 
         document.getElementById('csvFileInput').addEventListener('change', function(e) {
             const file = e.target.files[0];
             if (!file) return;
-
             currentUploadedFileName = file.name;
             const reader = new FileReader();
             reader.onload = function(event) {
@@ -145,9 +152,7 @@
                 let start = Math.max(0, i - Math.floor(windowSize / 2));
                 let end = Math.min(data.length, i + Math.floor(windowSize / 2) + 1);
                 let sum = 0;
-                for (let j = start; j < end; j++) {
-                    sum += data[j];
-                }
+                for (let j = start; j < end; j++) { sum += data[j]; }
                 filtered.push(sum / (end - start));
             }
             return filtered;
@@ -156,35 +161,85 @@
         function butterworthLowPass(data, cutoff, sampleRate) {
             const dt = 1.0 / sampleRate;
             if (cutoff >= sampleRate / 2) return [...data];
-
             const omega = 2.0 * Math.PI * cutoff / sampleRate;
             const k = Math.tan(omega / 2.0);
             const k2 = k * k;
             const sqrt2 = Math.sqrt(2.0);
-            
             const norm = 1.0 / (1.0 + sqrt2 * k + k2);
-            const a0 = k2 * norm;
-            const a1 = 2.0 * a0;
-            const a2 = a0;
-            const b1 = 2.0 * (k2 - 1.0) * norm;
-            const b2 = (1.0 - sqrt2 * k + k2) * norm;
+            const a0 = k2 * norm; const a1 = 2.0 * a0; const a2 = a0;
+            const b1 = 2.0 * (k2 - 1.0) * norm; const b2 = (1.0 - sqrt2 * k + k2) * norm;
 
             let filtered = new Array(data.length);
-            filtered[0] = data[0];
-            filtered[1] = data[1];
-
+            filtered[0] = data[0]; filtered[1] = data[1];
             for (let i = 2; i < data.length; i++) {
                 filtered[i] = a0 * data[i] + a1 * data[i-1] + a2 * data[i-2] - b1 * filtered[i-1] - b2 * filtered[i-2];
             }
             return filtered;
         }
 
-        // แก้ไข Bug: ใช้ Spread Operator โคลนอาร์เรย์เพื่อไม่ให้ขัดขวางลำดับข้อมูลดั้งเดิมในหน่วยความจำหลัก
         function applyZeroPhaseButterworth(data, cutoff, sampleRate) {
             let forward = butterworthLowPass(data, cutoff, sampleRate);
             let forwardReversed = [...forward].reverse();
             let backward = butterworthLowPass(forwardReversed, cutoff, sampleRate);
             return [...backward].reverse();
+        }
+
+        // ฟังก์ชันคำนวณหา 95% Confidence Ellipse Coordinates สำหรับวาดเส้นวงรีครอบคลุมพื้นที่การเซ
+        function calculateEllipsePoints(xData, yData, numPoints = 100) {
+            const n = xData.length;
+            if (n < 2) return { points: [], area: 0 };
+
+            const meanX = xData.reduce((a, b) => a + b, 0) / n;
+            const meanY = yData.reduce((a, b) => a + b, 0) / n;
+
+            let varX = 0, varY = 0, covXY = 0;
+            for(let i=0; i<n; i++) {
+                const diffX = xData[i] - meanX;
+                const diffY = yData[i] - meanY;
+                varX += diffX * diffX;
+                varY += diffY * diffY;
+                covXY += diffX * diffY;
+            }
+            varX /= (n - 1); varY /= (n - 1); covXY /= (n - 1);
+
+            // คำนวณหา Eigenvalues ของ Covariance Matrix เพื่อหาแกนสมมาตรหลักและแกนรอง
+            const trace = varX + varY;
+            const det = varX * varY - covXY * covXY;
+            const sqrtTerm = Math.sqrt(trace * trace / 4.0 - det);
+            const lambda1 = trace / 2.0 + sqrtTerm;
+            const lambda2 = trace / 2.0 - sqrtTerm;
+
+            // ค่าวิกฤตสถิติสำหรับการกระจายแบบ Chi-Square ที่ระดับนัยสำคัญ 95% (2 Degrees of Freedom = 5.991)
+            const chisquareVal = 5.991;
+            const axisA = Math.sqrt(chisquareVal * lambda1);
+            const axisB = Math.sqrt(chisquareVal * lambda2);
+            
+            // พื้นที่รูปวงรี (Area of Sway Ellipse)
+            const ellipseArea = Math.PI * axisA * axisB;
+
+            // หามุมเอียงระนาบ (Rotation Angle) ของทิศทางการเซหลัก
+            let angle = 0;
+            if (covXY !== 0) {
+                angle = Math.atan2(lambda1 - varX, covXY);
+            } else if (varX < varY) {
+                angle = Math.PI / 2;
+            }
+
+            let ellipsePoints = [];
+            for (let i = 0; i < numPoints; i++) {
+                const theta = (i / numPoints) * 2 * Math.PI;
+                const x0 = axisA * Math.cos(theta);
+                const y0 = axisB * Math.sin(theta);
+                
+                // สมการเมทริกซ์การหมุนพิกัด (Rotation Matrix Transformation)
+                const rotX = meanX + x0 * Math.cos(angle) - y0 * Math.sin(angle);
+                const rotY = meanY + x0 * Math.sin(angle) + y0 * Math.cos(angle);
+                ellipsePoints.push({ x: rotX, y: rotY });
+            }
+            // ปิดลูปวงรีกลับมาที่จุดแรก
+            ellipsePoints.push(ellipsePoints[0]);
+
+            return { points: ellipsePoints, area: ellipseArea, centerX: meanX, centerY: meanY };
         }
 
         function processData(text, currentFileName) {
@@ -210,11 +265,7 @@
                 return;
             }
 
-            let timestamps = [];
-            let rawForceData = [];
-            let swayXData = [];
-            let swayYData = [];
-            let velocityData = [];
+            let timestamps = [], rawForceData = [], swayXData = [], swayYData = [], velocityData = [];
 
             for (let i = 1; i < lines.length; i++) {
                 if (!lines[i].trim()) continue;
@@ -239,20 +290,24 @@
 
             const timeSecs = timestamps.map(t => t / samplingRate);
             const peakForce = Math.max(...forceData);
-            const maxVelocity = Math.max(...velocityData.map(Math.abs));
             
-            const minSwayX = Math.min(...swayXData);
-            const maxSwayX = Math.max(...swayXData);
-            const minSwayY = Math.min(...swayYData);
-            const maxSwayY = Math.max(...swayYData);
+            // หาดัชนีและพิกัดตำแหน่งของ Peak Velocity ในเส้นทางเคลื่อนที่
+            let absVelocity = velocityData.map(Math.abs);
+            const maxVelocity = Math.max(...absVelocity);
+            const idxPeakVelocity = absVelocity.indexOf(maxVelocity);
+            const peakVelocitySwayX = swayXData[idxPeakVelocity];
+            const peakVelocitySwayY = swayYData[idxPeakVelocity];
+            const peakVelocityTimeSec = timeSecs[idxPeakVelocity];
+            
+            const minSwayX = Math.min(...swayXData); const maxSwayX = Math.max(...swayXData);
+            const minSwayY = Math.min(...swayYData); const maxSwayY = Math.max(...swayYData);
+
+            // คำนวณขอบเขตและพื้นที่การเซ (95% Ellipse Area)
+            const ellipseResult = calculateEllipsePoints(swayXData, swayYData);
 
             let idxContact = forceData.findIndex(f => f >= contactThreshold);
-            let tContactSec = null;
-            let tStabilitySec = null;
-            let slTtsSec = null;
-            let bw = 0;
-            let upperCombined = 0;
-            let lowerCombined = 0;
+            let tContactSec = null; let tStabilitySec = null; let slTtsSec = null;
+            let bw = 0; let upperCombined = 0; let lowerCombined = 0;
 
             if (idxContact !== -1) {
                 tContactSec = timeSecs[idxContact];
@@ -288,6 +343,7 @@
 
             document.getElementById('metricSwayX').innerText = "↔️ Max Range Sway X: " + rangeX.toFixed(2);
             document.getElementById('metricSwayY').innerText = "↕️ Max Range Sway Y: " + rangeY.toFixed(2);
+            document.getElementById('metricSwayArea').innerText = "🎯 95% Ellipse Area: " + ellipseResult.area.toFixed(2) + " units²";
             document.getElementById('metricVelocity').innerText = "💨 Peak Velocity: " + maxVelocity.toFixed(6) + " m/s";
 
             document.getElementById('resultsPanel').classList.remove('hidden');
@@ -304,14 +360,14 @@
                 slTts: slTtsSec,
                 rangeSwayX: rangeX,
                 rangeSwayY: rangeY,
-                peakVelocity: maxVelocity
+                swayArea95: ellipseResult.area,
+                peakVelocity: maxVelocity,
+                peakVelocityTime: peakVelocityTimeSec
             };
 
-            if (window.myChart) {
-                window.myChart.destroy();
-            }
-
-            const ctx = document.getElementById('forceChart').getContext('2d');
+            // ---- CHART 1: FORCE-TIME CURVE ----
+            if (window.myForceChart) window.myForceChart.destroy();
+            const ctxForce = document.getElementById('forceChart').getContext('2d');
             const annotationObj = {};
 
             if (bw > 0) {
@@ -319,44 +375,76 @@
                 annotationObj.upperLine = { type: 'line', yMin: upperCombined, yMax: upperCombined, borderColor: '#d62728', borderWidth: 1, borderDash: [4, 4] };
                 annotationObj.lowerLine = { type: 'line', yMin: lowerCombined, yMax: lowerCombined, borderColor: '#d62728', borderWidth: 1, borderDash: [4, 4] };
             }
-
             if (tContactSec !== null) {
                 annotationObj.icLine = { type: 'line', xMin: tContactSec, xMax: tContactSec, borderColor: '#ff7f0e', borderWidth: 2, borderDash: [3, 3] };
-                annotationObj.icPoint = { type: 'point', xValue: tContactSec, yValue: forceData[idxContact], backgroundColor: '#ff7f0e', radius: 7, borderColor: '#white', borderWidth: 2 };
+                annotationObj.icPoint = { type: 'point', xValue: tContactSec, yValue: forceData[idxContact], backgroundColor: '#ff7f0e', radius: 6 };
             }
-
             if (tStabilitySec !== null) {
                 annotationObj.stLine = { type: 'line', xMin: tStabilitySec, xMax: tStabilitySec, borderColor: '#9467bd', borderWidth: 2, borderDash: [3, 3] };
-                const idxStableMarker = timeSecs.findIndex(t => t >= tStabilitySec);
-                annotationObj.stPoint = { type: 'point', xValue: tStabilitySec, yValue: forceData[idxStableMarker], backgroundColor: '#9467bd', radius: 7, borderColor: '#white', borderWidth: 2 };
                 annotationObj.stableZone = { type: 'box', xMin: tStabilitySec, xMax: tStabilitySec + stabilityWindowSec, backgroundColor: 'rgba(44, 160, 44, 0.1)', borderWidth: 0 };
             }
 
-            window.myChart = new Chart(ctx, {
+            window.myForceChart = new Chart(ctxForce, {
                 type: 'line',
                 data: {
                     labels: timeSecs,
-                    datasets: [{
-                        label: 'Vertical Ground Reaction Force (N) [' + selectedFilter + ']',
-                        data: forceData,
-                        borderColor: '#1f77b4',
-                        borderWidth: 1.5,
-                        pointRadius: 0,
-                        fill: false
-                    }]
+                    datasets: [{ label: 'Force (N)', data: forceData, borderColor: '#1f77b4', borderWidth: 1.5, pointRadius: 0, fill: false }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false, animation: false,
+                    scales: { x: { type: 'linear', title: { display: true, text: 'Time (Seconds)' } }, y: { title: { display: true, text: 'Force (Newtons)' } } },
+                    plugins: { annotation: { annotations: annotationObj } }
+                }
+            });
+
+            // ---- CHART 2: SWAY PLOT (STABILOGRAM) ----
+            if (window.mySwayChart) window.mySwayChart.destroy();
+            const ctxSway = document.getElementById('forceChart').parentNode.cloneNode(true);
+            const canvasSway = document.getElementById('swayChart');
+            
+            // จับพิกัดจุดเชื่อมโยงเส้นทางเพื่อเรนเดอร์ในรูปแบบกราฟกระจาย (Scatter X-Y Plot)
+            const swayPathPoints = swayXData.map((x, idx) => ({ x: x, y: swayYData[idx] }));
+
+            window.mySwayChart = new Chart(canvasSway, {
+                type: 'scatter',
+                data: {
+                    datasets: [
+                        {
+                            label: 'Sway Path (COP เส้นทาง)',
+                            data: swayPathPoints,
+                            borderColor: 'rgba(127, 127, 127, 0.4)',
+                            borderWidth: 1.5,
+                            showLine: true,
+                            pointRadius: 0,
+                            fill: false
+                        },
+                        {
+                            label: '95% Confidence Ellipse Area',
+                            data: ellipseResult.points,
+                            borderColor: '#e377c2',
+                            borderWidth: 2,
+                            showLine: true,
+                            pointRadius: 0,
+                            backgroundColor: 'rgba(227, 119, 194, 0.05)',
+                            fill: true
+                        },
+                        {
+                            label: `Peak Velocity Location (${maxVelocity.toFixed(4)} m/s)`,
+                            data: [{ x: peakVelocitySwayX, y: peakVelocitySwayY }],
+                            backgroundColor: '#d62728',
+                            pointStyle: 'triangle',
+                            pointRadius: 9,
+                            pointHoverRadius: 11
+                        }
+                    ]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
                     animation: false,
                     scales: {
-                        x: { type: 'linear', title: { display: true, text: 'Time (Seconds)' } },
-                        y: { title: { display: true, text: 'Force (Newtons)' } }
-                    },
-                    plugins: {
-                        annotation: {
-                            annotations: annotationObj
-                        }
+                        x: { type: 'linear', title: { display: true, text: 'Sway X (แนวซ้าย - ขวา)' } },
+                        y: { type: 'linear', title: { display: true, text: 'Sway Y (แนวหน้า - หลัง)' } }
                     }
                 }
             });
@@ -364,7 +452,6 @@
 
         document.getElementById('exportCsvBtn').addEventListener('click', function() {
             if (!globalReportData) return;
-
             const d = globalReportData;
             const csvRows = [
                 ['Parameter', 'Value', 'Unit'],
@@ -378,22 +465,17 @@
                 ['Single-Leg Time to Stability (SL-TTS)', d.slTts ? d.slTts.toFixed(4) : 'N/A', 'Second (s)'],
                 ['Max Range Sway X', d.rangeSwayX.toFixed(4), 'Units'],
                 ['Max Range Sway Y', d.rangeSwayY.toFixed(4), 'Units'],
-                ['Peak Velocity', d.peakVelocity.toFixed(6), 'm/s']
+                ['95% Confidence Ellipse Area', d.swayArea95.toFixed(4), 'Units²'],
+                ['Peak Velocity', d.peakVelocity.toFixed(6), 'm/s'],
+                ['Time at Peak Velocity', d.peakVelocityTime.toFixed(4), 'Second (s)']
             ];
-
             const csvContent = "\uFEFF" + csvRows.map(row => row.map(val => `"${val}"`).join(',')).join('\n');
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
             const link = document.createElement("a");
-            
             const baseName = d.fileName.substring(0, d.fileName.lastIndexOf('.')) || d.fileName;
-            link.setAttribute("href", url);
-            link.setAttribute("download", `SL_TTS_Filtered_Report_${baseName}.csv`);
-            link.style.visibility = 'hidden';
-            
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
+            link.setAttribute("href", url); link.setAttribute("download", `SL_TTS_Sway_Report_${baseName}.csv`);
+            link.style.visibility = 'hidden'; document.body.appendChild(link); link.click(); document.body.removeChild(link);
         });
     </script>
 </body>

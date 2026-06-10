@@ -6,6 +6,7 @@
     <title>SL-TTS Biomechanical Analyzer</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
 </head>
 <body class="bg-gray-50 text-gray-800 font-sans p-6">
 
@@ -33,34 +34,46 @@
             <input type="file" id="csvFileInput" accept=".csv" class="w-full p-3 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50 cursor-pointer hover:bg-gray-100">
         </div>
 
-        <div id="resultsPanel" class="hidden grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <div class="bg-blue-50 p-5 rounded-lg border border-blue-200 shadow-sm">
-                <span class="text-xs font-bold text-blue-600 uppercase tracking-wide">Kinetics Parameter</span>
-                <div class="text-2xl font-bold mt-1" id="metricPeakForce">-</div>
-                <div class="text-sm text-gray-500">Peak Force (แรงสูงสุด)</div>
-                <div class="text-md font-semibold mt-2 text-gray-700" id="metricBW">-</div>
+        <div id="resultsPanel" class="hidden">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                <div class="bg-blue-50 p-5 rounded-lg border border-blue-200 shadow-sm">
+                    <span class="text-xs font-bold text-blue-600 uppercase tracking-wide">Kinetics Parameter</span>
+                    <div class="text-2xl font-bold mt-1" id="metricPeakForce">-</div>
+                    <div class="text-sm text-gray-500">Peak Force (แรงสูงสุด)</div>
+                    <div class="text-md font-semibold mt-2 text-gray-700" id="metricBW">-</div>
+                </div>
+                <div class="bg-purple-50 p-5 rounded-lg border border-purple-200 shadow-sm">
+                    <span class="text-xs font-bold text-purple-600 uppercase tracking-wide">Stability Control</span>
+                    <div class="text-2xl font-bold mt-1 text-purple-700" id="metricTTS">-</div>
+                    <div class="text-sm text-gray-500">Single-Leg Time to Stability</div>
+                    <div class="text-xs text-gray-500 mt-2" id="metricContactTime">-</div>
+                </div>
+                <div class="bg-green-50 p-5 rounded-lg border border-green-200 shadow-sm">
+                    <span class="text-xs font-bold text-green-600 uppercase tracking-wide">Kinematics Profile</span>
+                    <div class="text-sm font-semibold mt-1" id="metricSwayX">-</div>
+                    <div class="text-sm font-semibold" id="metricSwayY">-</div>
+                    <div class="text-sm font-semibold mt-2 text-gray-700" id="metricVelocity">-</div>
+                </div>
             </div>
-            <div class="bg-purple-50 p-5 rounded-lg border border-purple-200 shadow-sm">
-                <span class="text-xs font-bold text-purple-600 uppercase tracking-wide">Stability Control</span>
-                <div class="text-2xl font-bold mt-1 text-purple-700" id="metricTTS">-</div>
-                <div class="text-sm text-gray-500">Single-Leg Time to Stability</div>
-                <div class="text-xs text-gray-500 mt-2" id="metricContactTime">-</div>
-            </div>
-            <div class="bg-green-50 p-5 rounded-lg border border-green-200 shadow-sm">
-                <span class="text-xs font-bold text-green-600 uppercase tracking-wide">Kinematics Profile</span>
-                <div class="text-sm font-semibold mt-1" id="metricSwayX">-</div>
-                <div class="text-sm font-semibold" id="metricSwayY">-</div>
-                <div class="text-sm font-semibold mt-2 text-gray-700" id="metricVelocity">-</div>
+
+            <div class="flex justify-end mb-8">
+                <button id="exportCsvBtn" class="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2 px-4 rounded-lg shadow transition duration-200 flex items-center gap-2">
+                    📥 ดาวน์โหลดรายงานสถิติ (.csv)
+                </button>
             </div>
         </div>
 
-        <div class="relative h-[400px] w-full hidden" id="chartContainer">
+        <div class="relative h-[450px] w-full hidden" id="chartContainer">
             <canvas id="forceChart"></canvas>
         </div>
     </div>
 
     <script>
-        let myChart = null;
+        // ประกาศตัวแปรไว้ที่ Global Scope เพื่อป้องกัน ReferenceError
+        window.myChart = null;
+        let globalReportData = null;
+
+        Chart.register(window['chartjs-plugin-annotation']);
 
         document.getElementById('csvFileInput').addEventListener('change', function(e) {
             const file = e.target.files[0];
@@ -68,17 +81,18 @@
 
             const reader = new FileReader();
             reader.onload = function(event) {
-                processData(event.target.result);
+                processData(event.target.result, file.name);
             };
             reader.readAsText(file);
         });
 
-        function processData(text) {
+        function processData(text, currentFileName) {
             const samplingRate = parseFloat(document.getElementById('samplingRate').value);
             const contactThreshold = parseFloat(document.getElementById('contactThreshold').value);
             const stabilityWindowSec = parseFloat(document.getElementById('stabilityWindow').value);
             const windowSize = Math.floor(stabilityWindowSec * samplingRate);
 
+            // รองรับการตัดบรรทัดของทุกระบบปฏิบัติการ
             const lines = text.split(/\r?\n/);
             if (lines.length < 2) return;
 
@@ -147,28 +161,66 @@
                 }
             }
 
-            document.getElementById('metricPeakForce').innerText = `${peakForce.toFixed(2)} N`;
-            document.getElementById('metricBW').innerText = bw > 0 ? `Body Weight อ้างอิง: ${bw.toFixed(2)} N` : `Body Weight อ้างอิง: -`;
+            document.getElementById('metricPeakForce').innerText = peakForce.toFixed(2) + " N";
+            document.getElementById('metricBW').innerText = bw > 0 ? "Body Weight อ้างอิง: " + bw.toFixed(2) + " N" : "Body Weight อ้างอิง: -";
             
             if (slTtsSec !== null) {
-                document.getElementById('metricTTS').innerText = `${slTtsSec.toFixed(3)} วินาที`;
-                document.getElementById('metricContactTime').innerText = `Initial Contact ที่: ${tContactSec.toFixed(3)} วินาที\nStability Onset ที่: ${tStabilitySec.toFixed(3)} วินาที`;
+                document.getElementById('metricTTS').innerText = slTtsSec.toFixed(3) + " วินาที";
+                document.getElementById('metricContactTime').innerText = "Initial Contact: " + tContactSec.toFixed(3) + " s | Stability Onset: " + tStabilitySec.toFixed(3) + " s";
             } else {
-                document.getElementById('metricTTS').innerText = `ไม่เข้าเกณฑ์คงที่`;
-                document.getElementById('metricContactTime').innerText = idxContact !== -1 ? `Initial Contact ที่: ${tContactSec.toFixed(3)} วินาที` : `ไม่พบจุดปะทะแรง 10N`;
+                document.getElementById('metricTTS').innerText = "ไม่เข้าเกณฑ์คงที่";
+                document.getElementById('metricContactTime').innerText = idxContact !== -1 ? "Initial Contact: " + tContactSec.toFixed(3) + " s" : "ไม่พบจุดปะทะแรง 10N";
             }
 
-            document.getElementById('metricSwayX').innerText = `↔️ Max Range Sway X: ${(maxSwayX - minSwayX).toFixed(2)}`;
-            document.getElementById('metricSwayY').innerText = `↕️ Max Range Sway Y: ${(maxSwayY - minSwayY).toFixed(2)}`;
-            document.getElementById('metricVelocity').innerText = `💨 Peak Velocity: ${maxVelocity.toFixed(6)} m/s`;
+            const rangeX = maxSwayX - minSwayX;
+            const rangeY = maxSwayY - minSwayY;
+
+            document.getElementById('metricSwayX').innerText = "↔️ Max Range Sway X: " + rangeX.toFixed(2);
+            document.getElementById('metricSwayY').innerText = "↕️ Max Range Sway Y: " + rangeY.toFixed(2);
+            document.getElementById('metricVelocity').innerText = "💨 Peak Velocity: " + maxVelocity.toFixed(6) + " m/s";
 
             document.getElementById('resultsPanel').classList.remove('hidden');
             document.getElementById('chartContainer').classList.remove('hidden');
 
-            if (myChart) myChart.destroy();
+            globalReportData = {
+                fileName: currentFileName,
+                peakForce: peakForce,
+                bodyWeight: bw,
+                initialContact: tContactSec,
+                stabilityOnset: tStabilitySec,
+                slTts: slTtsSec,
+                rangeSwayX: rangeX,
+                rangeSwayY: rangeY,
+                peakVelocity: maxVelocity
+            };
+
+            // เรียกทำลายออบเจกต์กราฟเก่าผ่าน window.myChart เพื่อความเสถียร
+            if (window.myChart) {
+                window.myChart.destroy();
+            }
 
             const ctx = document.getElementById('forceChart').getContext('2d');
-            myChart = new Chart(ctx, {
+            const annotationObj = {};
+
+            if (bw > 0) {
+                annotationObj.bwLine = { type: 'line', yMin: bw, yMax: bw, borderColor: '#2ca02c', borderWidth: 2, borderDash: [2, 2], label: { content: 'BW', display: true, position: 'start' } };
+                annotationObj.upperLine = { type: 'line', yMin: upperCombined, yMax: upperCombined, borderColor: '#d62728', borderWidth: 1, borderDash: [4, 4] };
+                annotationObj.lowerLine = { type: 'line', yMin: lowerCombined, yMax: lowerCombined, borderColor: '#d62728', borderWidth: 1, borderDash: [4, 4] };
+            }
+
+            if (tContactSec !== null) {
+                annotationObj.icLine = { type: 'line', xMin: tContactSec, xMax: tContactSec, borderColor: '#ff7f0e', borderWidth: 2, borderDash: [3, 3] };
+                annotationObj.icPoint = { type: 'point', xValue: tContactSec, yValue: forceData[idxContact], backgroundColor: '#ff7f0e', radius: 7, borderColor: '#white', borderWidth: 2 };
+            }
+
+            if (tStabilitySec !== null) {
+                annotationObj.stLine = { type: 'line', xMin: tStabilitySec, xMax: tStabilitySec, borderColor: '#9467bd', borderWidth: 2, borderDash: [3, 3] };
+                const idxStableMarker = timeSecs.findIndex(t => t >= tStabilitySec);
+                annotationObj.stPoint = { type: 'point', xValue: tStabilitySec, yValue: forceData[idxStableMarker], backgroundColor: '#9467bd', radius: 7, borderColor: '#white', borderWidth: 2 };
+                annotationObj.stableZone = { type: 'box', xMin: tStabilitySec, xMax: tStabilitySec + stabilityWindowSec, backgroundColor: 'rgba(44, 160, 44, 0.1)', borderWidth: 0 };
+            }
+
+            window.myChart = new Chart(ctx, {
                 type: 'line',
                 data: {
                     labels: timeSecs,
@@ -187,10 +239,47 @@
                     scales: {
                         x: { type: 'linear', title: { display: true, text: 'Time (Seconds)' } },
                         y: { title: { display: true, text: 'Force (Newtons)' } }
+                    },
+                    plugins: {
+                        annotation: {
+                            annotations: annotationObj
+                        }
                     }
                 }
             });
         }
+
+        document.getElementById('exportCsvBtn').addEventListener('click', function() {
+            if (!globalReportData) return;
+
+            const d = globalReportData;
+            const csvRows = [
+                ['Parameter', 'Value', 'Unit'],
+                ['File Name', d.fileName, 'Text'],
+                ['Calculated Body Weight (BW)', d.bodyWeight ? d.bodyWeight.toFixed(4) : 'N/A', 'Newton (N)'],
+                ['Peak Force', d.peakForce.toFixed(4), 'Newton (N)'],
+                ['Initial Contact Time', d.initialContact ? d.initialContact.toFixed(4) : 'N/A', 'Second (s)'],
+                ['Stability Onset Time', d.stabilityOnset ? d.stabilityOnset.toFixed(4) : 'N/A', 'Second (s)'],
+                ['Single-Leg Time to Stability (SL-TTS)', d.slTts ? d.slTts.toFixed(4) : 'N/A', 'Second (s)'],
+                ['Max Range Sway X', d.rangeSwayX.toFixed(4), 'Units'],
+                ['Max Range Sway Y', d.rangeSwayY.toFixed(4), 'Units'],
+                ['Peak Velocity', d.peakVelocity.toFixed(6), 'm/s']
+            ];
+
+            const csvContent = "\uFEFF" + csvRows.map(row => row.map(val => `"${val}"`).join(',')).join('\n');
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            
+            const baseName = d.fileName.substring(0, d.fileName.lastIndexOf('.')) || d.fileName;
+            link.setAttribute("href", url);
+            link.setAttribute("download", `SL_TTS_Report_${baseName}.csv`);
+            link.style.visibility = 'hidden';
+            
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        });
     </script>
 </body>
 </html>

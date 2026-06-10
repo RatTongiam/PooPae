@@ -1,0 +1,229 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <meta http-equiv="Content-Style-Type" content="text/css">
+  <title></title>
+  <meta name="Generator" content="Cocoa HTML Writer">
+  <meta name="CocoaVersion" content="2685.6">
+  <style type="text/css">
+    p.p1 {margin: 0.0px 0.0px 0.0px 0.0px; font: 12.0px Helvetica}
+    p.p2 {margin: 0.0px 0.0px 0.0px 0.0px; font: 12.0px Helvetica; min-height: 14.0px}
+  </style>
+</head>
+<body>
+<p class="p1">&lt;!DOCTYPE html&gt;</p>
+<p class="p1">&lt;html lang="th"&gt;</p>
+<p class="p1">&lt;head&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;meta charset="UTF-8"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;meta name="viewport" content="width=device-width, initial-scale=1.0"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;title&gt;SL-TTS Biomechanical Analyzer&lt;/title&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"&gt;&lt;/script&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;script src="https://cdn.jsdelivr.net/npm/chart.js"&gt;&lt;/script&gt;</p>
+<p class="p1">&lt;/head&gt;</p>
+<p class="p1">&lt;body class="bg-gray-50 text-gray-800 font-sans p-6"&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;div class="max-w-6xl mx-auto bg-white p-8 rounded-xl shadow-md"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;h1 class="text-3xl font-bold text-gray-900 mb-2"&gt;🏃‍♂️ Single-Leg Time to Stability (SL-TTS) Analyzer&lt;/h1&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;p class="text-gray-600 mb-6"&gt;ระบบวิเคราะห์เสถียรภาพและพารามิเตอร์ชีวกลศาสตร์ในท่า Single Leg Deadlift (SLDL) ทำงานแบบ Client-side 100%&lt;/p&gt;</p>
+<p class="p2"><span class="Apple-converted-space">        </span></p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 p-4 bg-gray-100 rounded-lg"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>&lt;div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>&lt;label class="block text-sm font-semibold text-gray-700 mb-1"&gt;Sampling Rate (Hz)&lt;/label&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>&lt;input type="number" id="samplingRate" value="1000" class="w-full p-2 border border-gray-300 rounded bg-white"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>&lt;div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>&lt;label class="block text-sm font-semibold text-gray-700 mb-1"&gt;Initial Contact Threshold (N)&lt;/label&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>&lt;input type="number" id="contactThreshold" value="10" class="w-full p-2 border border-gray-300 rounded bg-white"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>&lt;div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>&lt;label class="block text-sm font-semibold text-gray-700 mb-1"&gt;Stability Window (วินาที)&lt;/label&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>&lt;input type="number" id="stabilityWindow" value="1" step="0.1" class="w-full p-2 border border-gray-300 rounded bg-white"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;/div&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;div class="mb-8"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>&lt;label class="block text-sm font-semibold text-gray-700 mb-2"&gt;อัปโหลดไฟล์ข้อมูลดิบ (.csv)&lt;/label&gt;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>&lt;input type="file" id="csvFileInput" accept=".csv" class="w-full p-3 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50 cursor-pointer hover:bg-gray-100"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;/div&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;div id="resultsPanel" class="hidden grid grid-cols-1 md:grid-cols-3 gap-6 mb-8"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>&lt;div class="bg-blue-50 p-5 rounded-lg border border-blue-200 shadow-sm"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>&lt;span class="text-xs font-bold text-blue-600 uppercase tracking-wide"&gt;Kinetics Parameter&lt;/span&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>&lt;div class="text-2xl font-bold mt-1" id="metricPeakForce"&gt;-&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>&lt;div class="text-sm text-gray-500"&gt;Peak Force (แรงสูงสุด)&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>&lt;div class="text-md font-semibold mt-2 text-gray-700" id="metricBW"&gt;-&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>&lt;div class="bg-purple-50 p-5 rounded-lg border border-purple-200 shadow-sm"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>&lt;span class="text-xs font-bold text-purple-600 uppercase tracking-wide"&gt;Stability Control&lt;/span&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>&lt;div class="text-2xl font-bold mt-1 text-purple-700" id="metricTTS"&gt;-&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>&lt;div class="text-sm text-gray-500"&gt;Single-Leg Time to Stability&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>&lt;div class="text-xs text-gray-500 mt-2" id="metricContactTime"&gt;-&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>&lt;div class="bg-green-50 p-5 rounded-lg border border-green-200 shadow-sm"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>&lt;span class="text-xs font-bold text-green-600 uppercase tracking-wide"&gt;Kinematics Profile&lt;/span&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>&lt;div class="text-sm font-semibold mt-1" id="metricSwayX"&gt;-&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>&lt;div class="text-sm font-semibold" id="metricSwayY"&gt;-&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>&lt;div class="text-sm font-semibold mt-2 text-gray-700" id="metricVelocity"&gt;-&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;/div&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;div class="relative h-[400px] w-full hidden" id="chartContainer"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>&lt;canvas id="forceChart"&gt;&lt;/canvas&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;/div&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;script&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>let myChart = null;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">        </span>document.getElementById('csvFileInput').addEventListener('change', function(e) {</p>
+<p class="p1"><span class="Apple-converted-space">            </span>const file = e.target.files[0];</p>
+<p class="p1"><span class="Apple-converted-space">            </span>if (!file) return;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">            </span>const reader = new FileReader();</p>
+<p class="p1"><span class="Apple-converted-space">            </span>reader.onload = function(event) {</p>
+<p class="p1"><span class="Apple-converted-space">                </span>processData(event.target.result);</p>
+<p class="p1"><span class="Apple-converted-space">            </span>};</p>
+<p class="p1"><span class="Apple-converted-space">            </span>reader.readAsText(file);</p>
+<p class="p1"><span class="Apple-converted-space">        </span>});</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">        </span>function processData(text) {</p>
+<p class="p1"><span class="Apple-converted-space">            </span>const samplingRate = parseFloat(document.getElementById('samplingRate').value);</p>
+<p class="p1"><span class="Apple-converted-space">            </span>const contactThreshold = parseFloat(document.getElementById('contactThreshold').value);</p>
+<p class="p1"><span class="Apple-converted-space">            </span>const stabilityWindowSec = parseFloat(document.getElementById('stabilityWindow').value);</p>
+<p class="p1"><span class="Apple-converted-space">            </span>const windowSize = Math.floor(stabilityWindowSec * samplingRate);</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">            </span>const lines = text.split(/\r?\n/);</p>
+<p class="p1"><span class="Apple-converted-space">            </span>if (lines.length &lt; 2) return;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">            </span>// ตรวจสอบหัวข้อคอลัมน์จากแถวแรก</p>
+<p class="p1"><span class="Apple-converted-space">            </span>const headers = lines[0].split(';');</p>
+<p class="p1"><span class="Apple-converted-space">            </span>const idxForce = headers.indexOf('2 Newton');</p>
+<p class="p1"><span class="Apple-converted-space">            </span>const idxSwayX = headers.indexOf('2 sway X');</p>
+<p class="p1"><span class="Apple-converted-space">            </span>const idxSwayY = headers.indexOf('2 sway Y');</p>
+<p class="p1"><span class="Apple-converted-space">            </span>const idxVelocity = headers.indexOf('2 velocity');</p>
+<p class="p1"><span class="Apple-converted-space">            </span>const idxTime = headers.indexOf('timestamp');</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">            </span>if (idxForce === -1) {</p>
+<p class="p1"><span class="Apple-converted-space">                </span>alert("โครงสร้างไฟล์ไม่ถูกต้อง: ไม่พบคอลัมน์ '2 Newton'");</p>
+<p class="p1"><span class="Apple-converted-space">                </span>return;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">            </span>let timestamps = [];</p>
+<p class="p1"><span class="Apple-converted-space">            </span>let forceData = [];</p>
+<p class="p1"><span class="Apple-converted-space">            </span>let swayXData = [];</p>
+<p class="p1"><span class="Apple-converted-space">            </span>let swayYData = [];</p>
+<p class="p1"><span class="Apple-converted-space">            </span>let velocityData = [];</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">            </span>// ทำการคลี่ข้อมูลลูปอ่านค่าจากแถว</p>
+<p class="p1"><span class="Apple-converted-space">            </span>for (let i = 1; i &lt; lines.length; i++) {</p>
+<p class="p1"><span class="Apple-converted-space">                </span>if (!lines[i].trim()) continue;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>const cols = lines[i].split(';');</p>
+<p class="p1"><span class="Apple-converted-space">                </span>if (cols.length &lt; headers.length) continue;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">                </span>timestamps.push(parseFloat(cols[idxTime]));</p>
+<p class="p1"><span class="Apple-converted-space">                </span>forceData.push(parseFloat(cols[idxForce]));</p>
+<p class="p1"><span class="Apple-converted-space">                </span>swayXData.push(parseFloat(cols[idxSwayX]));</p>
+<p class="p1"><span class="Apple-converted-space">                </span>swayYData.push(parseFloat(cols[idxSwayY]));</p>
+<p class="p1"><span class="Apple-converted-space">                </span>velocityData.push(parseFloat(cols[idxVelocity]));</p>
+<p class="p1"><span class="Apple-converted-space">            </span>}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">            </span>const timeSecs = timestamps.map(t =&gt; t / samplingRate);</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">            </span>// ---- 1. คำนวณพารามิเตอร์พื้นฐาน ----</p>
+<p class="p1"><span class="Apple-converted-space">            </span>const peakForce = Math.max(...forceData);</p>
+<p class="p1"><span class="Apple-converted-space">            </span>const maxVelocity = Math.max(...velocityData.map(Math.abs));</p>
+<p class="p2"><span class="Apple-converted-space">            </span></p>
+<p class="p1"><span class="Apple-converted-space">            </span>const minSwayX = Math.min(...swayXData);</p>
+<p class="p1"><span class="Apple-converted-space">            </span>const maxSwayX = Math.max(...swayXData);</p>
+<p class="p1"><span class="Apple-converted-space">            </span>const minSwayY = Math.min(...swayYData);</p>
+<p class="p1"><span class="Apple-converted-space">            </span>const maxSwayY = Math.max(...swayYData);</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">            </span>// ---- 2. คำนวณตรรกะวิเคราะห์ SL-TTS ----</p>
+<p class="p1"><span class="Apple-converted-space">            </span>let idxContact = forceData.findIndex(f =&gt; f &gt;= contactThreshold);</p>
+<p class="p1"><span class="Apple-converted-space">            </span>let tContactSec = null;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>let tStabilitySec = null;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>let slTtsSec = null;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>let bw = 0;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>let upperCombined = 0;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>let lowerCombined = 0;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">            </span>if (idxContact !== -1) {</p>
+<p class="p1"><span class="Apple-converted-space">                </span>tContactSec = timeSecs[idxContact];</p>
+<p class="p2"><span class="Apple-converted-space">                </span></p>
+<p class="p1"><span class="Apple-converted-space">                </span>// คำนวณหา Body Weight จาก 100 จุดสุดท้าย</p>
+<p class="p1"><span class="Apple-converted-space">                </span>const last100 = forceData.slice(-100);</p>
+<p class="p1"><span class="Apple-converted-space">                </span>bw = last100.reduce((a, b) =&gt; a + b, 0) / last100.length;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>upperCombined = bw + (0.05 * bw);</p>
+<p class="p1"><span class="Apple-converted-space">                </span>lowerCombined = bw - (0.05 * bw);</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">                </span>// ค้นหา Onset of Stability ตามเกณฑ์หน้าต่างต่อเนื่อง 1 วินาที</p>
+<p class="p1"><span class="Apple-converted-space">                </span>for (let i = idxContact; i &lt;= forceData.length - windowSize; i++) {</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>const window = forceData.slice(i, i + windowSize);</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>const isStable = window.every(f =&gt; f &gt;= lowerCombined &amp;&amp; f &lt;= upperCombined);</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>if (isStable) {</p>
+<p class="p1"><span class="Apple-converted-space">                        </span>tStabilitySec = timeSecs[i];</p>
+<p class="p1"><span class="Apple-converted-space">                        </span>slTtsSec = tStabilitySec - tContactSec;</p>
+<p class="p1"><span class="Apple-converted-space">                        </span>break;</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>}</p>
+<p class="p1"><span class="Apple-converted-space">                </span>}</p>
+<p class="p1"><span class="Apple-converted-space">            </span>}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">            </span>// ---- 3. อัปเดตข้อมูลขึ้นหน้าจอระบบ UI ----</p>
+<p class="p1"><span class="Apple-converted-space">            </span>document.getElementById('metricPeakForce').innerText = `${peakForce.toFixed(2)} N`;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>document.getElementById('metricBW').innerText = bw &gt; 0 ? `Body Weight อ้างอิง: ${bw.toFixed(2)} N` : `Body Weight อ้างอิง: -`;</p>
+<p class="p2"><span class="Apple-converted-space">            </span></p>
+<p class="p1"><span class="Apple-converted-space">            </span>if (slTtsSec !== null) {</p>
+<p class="p1"><span class="Apple-converted-space">                </span>document.getElementById('metricTTS').innerText = `${slTtsSec.toFixed(3)} วินาที`;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>document.getElementById('metricContactTime').innerText = `Initial Contact ที่: ${tContactSec.toFixed(3)} วินาที\nStability Onset ที่: ${tStabilitySec.toFixed(3)} วินาที`;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>} else {</p>
+<p class="p1"><span class="Apple-converted-space">                </span>document.getElementById('metricTTS').innerText = `ไม่เข้าเกณฑ์คงที่`;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>document.getElementById('metricContactTime').innerText = idxContact !== -1 ? `Initial Contact ที่: ${tContactSec.toFixed(3)} วินาที` : `ไม่พบจุดปะทะแรง 10N`;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">            </span>document.getElementById('metricSwayX').innerText = `↔️ Max Range Sway X: ${(maxSwayX - minSwayX).toFixed(2)}`;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>document.getElementById('metricSwayY').innerText = `↕️ Max Range Sway Y: ${(maxSwayY - minSwayY).toFixed(2)}`;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>document.getElementById('metricVelocity').innerText = `💨 Peak Velocity: ${maxVelocity.toFixed(6)} m/s`;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">            </span>document.getElementById('resultsPanel').classList.remove('hidden');</p>
+<p class="p1"><span class="Apple-converted-space">            </span>document.getElementById('chartContainer').classList.remove('hidden');</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">            </span>// ---- 4. สร้างและเรนเดอร์กราฟด้วย Chart.js ----</p>
+<p class="p1"><span class="Apple-converted-space">            </span>if (myChart) myChart.destroy();</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">            </span>const ctx = document.getElementById('forceChart').getContext('2d');</p>
+<p class="p2"><span class="Apple-converted-space">            </span></p>
+<p class="p1"><span class="Apple-converted-space">            </span>// สร้างเส้นระดับแนวนอนสำหรับขอบเขตความเสถียร</p>
+<p class="p1"><span class="Apple-converted-space">            </span>const annotations = [];</p>
+<p class="p1"><span class="Apple-converted-space">            </span>if (bw &gt; 0) {</p>
+<p class="p1"><span class="Apple-converted-space">                </span>annotations.push({ type: 'line', yMin: bw, yMax: bw, borderColor: 'green', borderWidth: 2, label: { content: 'BW', enabled: true } });</p>
+<p class="p1"><span class="Apple-converted-space">            </span>}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">            </span>myChart = new Chart(ctx, {</p>
+<p class="p1"><span class="Apple-converted-space">                </span>type: 'line',</p>
+<p class="p1"><span class="Apple-converted-space">                </span>data: {</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>labels: timeSecs,</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>datasets: [{</p>
+<p class="p1"><span class="Apple-converted-space">                        </span>label: 'Vertical Ground Reaction Force (N)',</p>
+<p class="p1"><span class="Apple-converted-space">                        </span>data: forceData,</p>
+<p class="p1"><span class="Apple-converted-space">                        </span>borderColor: '#7f7f7f',</p>
+<p class="p1"><span class="Apple-converted-space">                        </span>borderWidth: 1.5,</p>
+<p class="p1"><span class="Apple-converted-space">                        </span>pointRadius: 0,</p>
+<p class="p1"><span class="Apple-converted-space">                        </span>fill: false</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>}]</p>
+<p class="p1"><span class="Apple-converted-space">                </span>},</p>
+<p class="p1"><span class="Apple-converted-space">                </span>options: {</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>responsive: true,</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>maintainAspectRatio: false,</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>scales: {</p>
+<p class="p1"><span class="Apple-converted-space">                        </span>x: { type: 'linear', title: { display: true, text: 'Time (Seconds)' } },</p>
+<p class="p1"><span class="Apple-converted-space">                        </span>y: { title: { display: true, text: 'Force (Newtons)' } }</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>}</p>
+<p class="p1"><span class="Apple-converted-space">                </span>}</p>
+<p class="p1"><span class="Apple-converted-space">            </span>});</p>
+<p class="p1"><span class="Apple-converted-space">        </span>}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;/script&gt;</p>
+<p class="p1">&lt;/body&gt;</p>
+<p class="p1">&lt;/html&gt;</p>
+</body>
+</html>

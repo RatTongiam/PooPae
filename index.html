@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SL-TTS Biomechanical Analyzer with Filter</title>
+    <title>SL-TTS Biomechanical Analyzer (Fixed Filter)</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
@@ -95,7 +95,6 @@
 
         Chart.register(window['chartjs-plugin-annotation']);
 
-        // ดักจับการเปลี่ยนค่าฟิลเตอร์เพื่อปรับปรุงหน่วยการแสดงผลการตั้งค่า
         document.getElementById('filterType').addEventListener('change', function() {
             const type = this.value;
             const paramInput = document.getElementById('filterParam');
@@ -115,13 +114,11 @@
                 helpText.innerText = "สัญญาณดิบดั้งเดิมไม่มีการคัดกรองสัญญาณรบกวน";
             }
             
-            // หากมีไฟล์เปิดค้างไว้ ให้สั่งคำนวณและพลอตกราฟใหม่ทันทีเมื่อเปลี่ยนฟิลเตอร์
             if (rawFileText) {
                 processData(rawFileText, currentUploadedFileName);
             }
         });
 
-        // ดักจับการเปลี่ยนตัวแปรความถี่ฟิลเตอร์เพื่อคำนวณกราฟใหม่แบบเรียลไทม์
         document.getElementById('filterParam').addEventListener('input', function() {
             if (rawFileText) {
                 processData(rawFileText, currentUploadedFileName);
@@ -141,7 +138,6 @@
             reader.readAsText(file);
         });
 
-        // --- 1. ฟังก์ชันทางคณิตศาสตร์: Moving Average Filter ---
         function applyMovingAverage(data, windowSize) {
             if (windowSize <= 1) return data;
             let filtered = [];
@@ -157,17 +153,10 @@
             return filtered;
         }
 
-        // --- 2. ฟังก์ชันทางคณิตศาสตร์: 2nd-Order Low-pass Butterworth Filter (Single Pass) ---
         function butterworthLowPass(data, cutoff, sampleRate) {
             const dt = 1.0 / sampleRate;
-            const rc = 1.0 / (2.0 * Math.PI * cutoff);
-            const alpha = dt / (rc + dt);
-            
-            let filtered = new Array(data.length);
-            filtered[0] = data[0];
-            if(data.length > 1) filtered[1] = data[1];
-            
-            // ค่าสัมประสิทธิ์สำหรับตัวกรองสัญญาณ Butterworth อันดับสอง 
+            if (cutoff >= sampleRate / 2) return [...data];
+
             const omega = 2.0 * Math.PI * cutoff / sampleRate;
             const k = Math.tan(omega / 2.0);
             const k2 = k * k;
@@ -180,22 +169,22 @@
             const b1 = 2.0 * (k2 - 1.0) * norm;
             const b2 = (1.0 - sqrt2 * k + k2) * norm;
 
+            let filtered = new Array(data.length);
+            filtered[0] = data[0];
+            filtered[1] = data[1];
+
             for (let i = 2; i < data.length; i++) {
                 filtered[i] = a0 * data[i] + a1 * data[i-1] + a2 * data[i-2] - b1 * filtered[i-1] - b2 * filtered[i-2];
             }
             return filtered;
         }
 
-        // --- 3. ฟังก์ชันการกรองแบบเดินหน้าและถอยหลังเพื่อหักล้างเฟสเคลื่อน (Dual-Pass Zero-Phase Lag) ---
+        // แก้ไข Bug: ใช้ Spread Operator โคลนอาร์เรย์เพื่อไม่ให้ขัดขวางลำดับข้อมูลดั้งเดิมในหน่วยความจำหลัก
         function applyZeroPhaseButterworth(data, cutoff, sampleRate) {
-            if (cutoff >= sampleRate / 2) return data; // ป้องกัน Nyquist Shannon Frequency Bound Error
-            // กรองไปข้างหน้า
             let forward = butterworthLowPass(data, cutoff, sampleRate);
-            // พลิกกลับสายข้อมูลแล้วกรองถอยหลัง
-            forward.reverse();
-            let backward = butterworthLowPass(forward, cutoff, sampleRate);
-            backward.reverse(); // ดึงลำดับกลับคืนที่เดิม
-            return backward;
+            let forwardReversed = [...forward].reverse();
+            let backward = butterworthLowPass(forwardReversed, cutoff, sampleRate);
+            return [...backward].reverse();
         }
 
         function processData(text, currentFileName) {
@@ -239,14 +228,13 @@
                 velocityData.push(parseFloat(cols[idxVelocity]));
             }
 
-            // ---- ขั้นตอนทำระบบกรองสัญญาณตามเงื่อนไขที่เลือก ----
             let forceData = [];
             if (selectedFilter === 'moving_average' && filterParamVal > 0) {
                 forceData = applyMovingAverage(rawForceData, Math.floor(filterParamVal));
             } else if (selectedFilter === 'butterworth' && filterParamVal > 0) {
                 forceData = applyZeroPhaseButterworth(rawForceData, filterParamVal, samplingRate);
             } else {
-                forceData = [...rawForceData]; // ไม่กรอง ใช้สัญญาณดิบสัมบูรณ์
+                forceData = [...rawForceData];
             }
 
             const timeSecs = timestamps.map(t => t / samplingRate);
@@ -360,7 +348,7 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    animation: false, // ปิด Animation เพื่อความเร็วสูงสุดในการคำนวณแบบเรียลไทม์
+                    animation: false,
                     scales: {
                         x: { type: 'linear', title: { display: true, text: 'Time (Seconds)' } },
                         y: { title: { display: true, text: 'Force (Newtons)' } }
